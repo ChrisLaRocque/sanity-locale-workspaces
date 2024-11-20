@@ -9,7 +9,9 @@ const supportedLanguages = [
   {id: 'es', title: 'Spanish'},
   {id: 'en', title: 'English'},
 ]
+// Schema types to be translated
 const translatedSchemaTypes = ['lesson']
+
 export default defineConfig(
   // Return a config object per-language
   supportedLanguages.map((language) => {
@@ -18,23 +20,46 @@ export default defineConfig(
       title: language.title,
       basePath: `/${language.id}`,
 
-      projectId: '6cr3frbp',
+      projectId: process.env.SANITY_STUDIO_PROJECT_ID,
       dataset: 'production',
 
       plugins: [
-        structureTool(),
+        structureTool({
+          // Use structure to limit what language content shows per-workspace
+          structure: (S) =>
+            S.list()
+              .title('Content')
+              .items([
+                // Create a list item per-translated schema type
+                S.listItem()
+                  .title(`Lessons`)
+                  .child(
+                    S.documentList()
+                      .apiVersion('2024-06-01')
+                      .title(`${language.title} lessons`)
+                      .schemaType('lesson')
+                      .filter('_type == "lesson" && language == $language')
+                      .params({language: language.id}),
+                  ),
+              ]),
+        }),
         visionTool(),
         documentInternationalization({
-          supportedLanguages: [language],
+          supportedLanguages,
           schemaTypes: translatedSchemaTypes,
         }),
       ],
 
       schema: {
         types: schemaTypes,
-        // Filter out the default new document action
-        templates: (prev) =>
-          prev.filter((template) => !translatedSchemaTypes.includes(template.id)),
+        // Limit new document creation to current language
+        templates: (prev) => {
+          return prev.filter((template) => {
+            if (translatedSchemaTypes.includes(template.schemaType)) {
+              return template.value.language == language.id
+            }
+          })
+        },
       },
     } as WorkspaceOptions
   }),
